@@ -193,39 +193,41 @@ void execute(Chip8 *chip8) {
           break;
         
         case ADDC: {
-          unsigned int result = (unsigned int)chip8->V[x] + (unsigned int)chip8->V[y];
-          if (result > 255) {
-            chip8->V[0xF] = 1;
-          } else {
-            chip8->V[0xF] = 0;
-          }
-          chip8->V[x] = result & 0xFF;
+          u16 sum  = (u16)chip8->V[x] + (u16)chip8->V[y];
+          chip8->V[x] = sum & 0xFF;
+          chip8->V[0xF] = (sum > 255) ? 1 : 0;
           break;
         }
         
         case SUBY: {
-          u8 result = chip8->V[x] - chip8->V[y];
-          chip8->V[0xF] = (chip8->V[x] >= chip8->V[y]) ? 1 : 0;
-          chip8->V[x] = result;
+          u8 prevVx = chip8->V[x];
+          u8 prevVy = chip8->V[y]; 
+          chip8->V[x] = chip8->V[x] - chip8->V[y];
+          chip8->V[0xF] = (prevVx >= prevVy) ? 1 : 0;
           break;
         }
 
         case SUBX: {
-          u8 result = chip8->V[y] - chip8->V[x];
-          chip8->V[0xF] = (chip8->V[y] >= chip8->V[x]) ? 1 : 0;
-          chip8->V[x] = result;
+          u8 prevVx = chip8->V[x];
+          u8 prevVy = chip8->V[y]; 
+          chip8->V[x] = chip8->V[y] - chip8->V[x];
+          chip8->V[0xF] = (prevVy >= prevVx) ? 1 : 0;
           break;
         }
 
-        case SHR:
-          chip8->V[0x0F] = chip8->V[x] & 0x1;
-          chip8->V[x] >>= 1;
+        case SHR: {
+          u8 lsb =  chip8->V[x] & 0x1;
+          chip8->V[x] >>= 1;     
+          chip8->V[0x0F] = lsb;
           break;
+        }
 
-        case SHL:
-          chip8->V[0x0F] = (chip8->V[x] >> 7) & 0x1;
+        case SHL: {
+          u8 msb = (chip8->V[x] >> 7) & 0x1;
           chip8->V[x] <<= 1;
+          chip8->V[0xF] = msb;     
           break;
+        }
       }
       break;
 
@@ -238,14 +240,12 @@ void execute(Chip8 *chip8) {
       break;
 
     case SKP:
-      printf("SKP: Checking if key %X is pressed: %d\n", chip8->V[x], chip8->kb[chip8->V[x]]);
       if (chip8->kb[chip8->V[x]]) {
         chip8->pc += 2;
       }
       break;
 
     case SKNP:
-      printf("SKP: Checking if key %X is not pressed: %d\n", chip8->V[x], chip8->kb[chip8->V[x]]);
       if (!chip8->kb[chip8->V[x]]) {
         chip8->pc += 2;
       }
@@ -258,29 +258,23 @@ void execute(Chip8 *chip8) {
           break;
 
         case GKP:
-
-          chip8->key = 0; // Initialize key to 0 (no key pressed)
+          chip8->key = 0;
           while (1) {
-            // Decrement timers while waiting for key press
             decrementTimers(chip8);
 
-            // Check if a key has been pressed
             chip8->key = checkKeyPress(chip8);
 
-            // If a key is pressed, store it in V[x]
             if (chip8->key > 0) {
-              chip8->V[x] = chip8->key; // Store the pressed key in V[x]
-              break; // Exit the loop
+              chip8->V[x] = chip8->key;
+              break; 
             }
 
-            // Check for window close event
             if (WindowShouldClose()) {
-              CloseWindow(); // Clean up and close the window
-              exit(0); // Terminate the program
+              break;
             }
           }
-          // Do not increment the PC here, effectively halting execution until a key is pressed.
           break;
+
         case SDT:
           chip8->dt = chip8->V[x];
           break;
@@ -342,8 +336,6 @@ int main(int argc, char *argv[]) {
 
   Chip8 chip8;
   initChip8(&chip8);
-  chip8.ram[0x1FF] = 3;
-
   if (argc < 2) {
     printf("Usage: %s <path_to_rom.ch8>\n", argv[0]);
     return EXIT_FAILURE;
