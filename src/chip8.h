@@ -1,9 +1,14 @@
 #include <stdint.h>
 #include <raylib.h>
 
+//screen
 #define WIDTH 640
 #define HEIGHT 320
 #define SCALE 10
+
+// timer
+#define TIMER_FREQUENCY 60                // Timer frequency in Hz
+#define TIMER_INTERVAL (1000 / TIMER_FREQUENCY) // Interval in milliseconds
 
 // instructions
 #define CLS 0x00E0  // Clear the display.
