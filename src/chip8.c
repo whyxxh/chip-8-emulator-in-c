@@ -5,9 +5,6 @@
 #include <time.h>
 #include "chip8.h"
 
-#define TIMER_FREQUENCY 60 // Timer frequency in Hz
-#define TIMER_INTERVAL (1000 / TIMER_FREQUENCY) // Interval in milliseconds
-//
 void decrementTimers(Chip8 *chip8) {
     if (chip8->dt > 0) {
         chip8->dt--;
@@ -355,7 +352,7 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
-    // SetTargetFPS(120);
+    SetTargetFPS(120);
     clock_t lastTimerUpdate = clock();
 
     InitWindow(WIDTH, HEIGHT, "CHIP 8 EMU");
