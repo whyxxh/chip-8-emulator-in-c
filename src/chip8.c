@@ -14,31 +14,29 @@ void decrementTimers(Chip8 *chip8) {
     }
 }
 
-int checkKeyPress(Chip8 *chip8) {
-    memset(chip8->kb, 0, sizeof(chip8->kb));
-    if (IsKeyDown(KEY_ONE)) { chip8->kb[0x1] = 1; return 0x1;}
-    if (IsKeyDown(KEY_TWO)) { chip8->kb[0x2] = 1; return 0x2;}
-    if (IsKeyDown(KEY_THREE)) { chip8->kb[0x3] = 1; return  0x3;}
-    if (IsKeyDown(KEY_FOUR)) { chip8->kb[0xC] = 1; return 0xC;}
 
-    if (IsKeyDown(KEY_Q)) { chip8->kb[0x4] = 1; return 0x4; }
-    if (IsKeyDown(KEY_W)) { chip8->kb[0x5] = 1; return 0x5; }
-    if (IsKeyDown(KEY_E)) { chip8->kb[0x6] = 1; return 0x6; }
-    if (IsKeyDown(KEY_R)) { chip8->kb[0xD] = 1; return 0xD; }
+void checkKeyPress(Chip8 *chip8) {
+    // Poll each key state without returning immediately
+    chip8->kb[0x1] = IsKeyDown(KEY_ONE);
+    chip8->kb[0x2] = IsKeyDown(KEY_TWO);
+    chip8->kb[0x3] = IsKeyDown(KEY_THREE);
+    chip8->kb[0xC] = IsKeyDown(KEY_FOUR);
 
-    if (IsKeyDown(KEY_A)) { chip8->kb[0x7] = 1; return 0x7; }
-    if (IsKeyDown(KEY_S)) { chip8->kb[0x8] = 1; return 0x8; }
-    if (IsKeyDown(KEY_D)) { chip8->kb[0x9] = 1; return 0x9; }
-    if (IsKeyDown(KEY_F)) { chip8->kb[0xE] = 1; return 0xE; }
+    chip8->kb[0x4] = IsKeyDown(KEY_Q);
+    chip8->kb[0x5] = IsKeyDown(KEY_W);
+    chip8->kb[0x6] = IsKeyDown(KEY_E);
+    chip8->kb[0xD] = IsKeyDown(KEY_R);
 
-    if (IsKeyDown(KEY_Z)) { chip8->kb[0xA] = 1; return 0xA; }
-    if (IsKeyDown(KEY_X)) { chip8->kb[0x0] = 1; return 0x0; }
-    if (IsKeyDown(KEY_C)) { chip8->kb[0xB] = 1; return 0xB; }
-    if (IsKeyDown(KEY_V)) { chip8->kb[0xF] = 1; return 0xF; }
+    chip8->kb[0x7] = IsKeyDown(KEY_A);
+    chip8->kb[0x8] = IsKeyDown(KEY_S);
+    chip8->kb[0x9] = IsKeyDown(KEY_D);
+    chip8->kb[0xE] = IsKeyDown(KEY_F);
 
-    return 0;
+    chip8->kb[0xA] = IsKeyDown(KEY_Z);
+    chip8->kb[0x0] = IsKeyDown(KEY_X);
+    chip8->kb[0xB] = IsKeyDown(KEY_C);
+    chip8->kb[0xF] = IsKeyDown(KEY_V);
 }
-
 
 void initChip8(Chip8 *chip8) {
     memset(chip8->ram, 0, sizeof(chip8->ram));
@@ -264,21 +262,21 @@ void execute(Chip8 *chip8) {
                     break;
 
                 case GKP:
-                    chip8->key = 0;
-                    while (1) {
-                        decrementTimers(chip8);
-
-                        chip8->key = checkKeyPress(chip8);
-
-                        if (chip8->key > 0) {
-                            chip8->V[x] = chip8->key;
-                            break; 
-                        }
-
-                        if (WindowShouldClose()) {
-                            break;
-                        }
-                    }
+                    // chip8->key = 0;
+                    // while (1) {
+                    //     decrementTimers(chip8);
+                    //
+                    //     chip8->key = checkKeyPress(chip8);
+                    //
+                    //     if (chip8->key > 0) {
+                    //         chip8->V[x] = chip8->key;
+                    //         break; 
+                    //     }
+                    //
+                    //     if (WindowShouldClose()) {
+                    //         break;
+                    //     }
+                    // }
                     break;
 
                 case SDT:
@@ -358,7 +356,7 @@ int main(int argc, char *argv[]) {
     InitWindow(WIDTH, HEIGHT, "CHIP 8 EMU");
 
     while (!WindowShouldClose()) {
-        chip8.key = checkKeyPress(&chip8);
+        checkKeyPress(&chip8);
         fetch(&chip8);
         execute(&chip8);
         draw(&chip8);
