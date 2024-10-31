@@ -6,9 +6,11 @@ this is a small (not very good) chip 8 emulator
 
 - [X] fix the operations
 - [ ] fix the display instructions
+- [ ] Fix keyboard (ping)
 - [ ] add in sounds
 - [ ] make a rom
 
 Not required:
 - [ ] make the code prettier
 - [ ] try to find where my code is unsafe and fix it 
+- [x] add a gitupd.sh lol
