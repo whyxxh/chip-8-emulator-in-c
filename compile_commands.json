@@ -1,0 +1,7 @@
+[
+  {
+    "directory": "/home/rubs/Documents/code/clang/chip-8-emulator-in-c/src",
+    "command": "clang -Wall -Wextra -std=c11 chip8.c -o chip8",
+    "file": "chip8.c"
+  }
+]
