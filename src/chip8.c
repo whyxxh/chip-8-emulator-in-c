@@ -5,18 +5,16 @@
 #include <time.h>
 #include "chip8.h"
 
-void decrementTimers(Chip8 *chip8) {
-    if (chip8->dt > 0) {
-        chip8->dt--;
-    }
-    if (chip8->st > 0) {
-        chip8->st--;
-    }
+#define CYCLES_PER_FRAME 10   // ~600 instructions/sec at 60 FPS
+
+void decrementTimers(Chip8 *chip8)
+{
+    if (chip8->dt > 0) chip8->dt--;
+    if (chip8->st > 0) chip8->st--;
 }
 
-
-void checkKeyPress(Chip8 *chip8) {
-    // Poll each key state without returning immediately
+void checkKeyPress(Chip8 *chip8)
+{
     chip8->kb[0x1] = IsKeyDown(KEY_ONE);
     chip8->kb[0x2] = IsKeyDown(KEY_TWO);
     chip8->kb[0x3] = IsKeyDown(KEY_THREE);
@@ -38,7 +36,8 @@ void checkKeyPress(Chip8 *chip8) {
     chip8->kb[0xF] = IsKeyDown(KEY_V);
 }
 
-void initChip8(Chip8 *chip8) {
+void initChip8(Chip8 *chip8)
+{
     memset(chip8->ram, 0, sizeof(chip8->ram));
     memset(chip8->V, 0, sizeof(chip8->V));
     memset(chip8->stack, 0, sizeof(chip8->stack));
@@ -55,46 +54,61 @@ void initChip8(Chip8 *chip8) {
     }
 }
 
-int loadProgram(Chip8 *chip8, const char *file) {
+int loadProgram(Chip8 *chip8, const char *file)
+{
     FILE *program = fopen(file, "rb");
     if (!program) {
-        fprintf(stderr, "failed to load the program");
+        fprintf(stderr, "failed to open the program\n");
         return -1;
     }
-    // reads the content of the binary file
-    size_t bytesRead = fread(&chip8->ram[0x200], sizeof(u8), sizeof(chip8->ram) - 0x200, program);
-    if (bytesRead == 0 && ferror(program)) {
-        fprintf(stderr, "failed to read the program");
+
+    size_t maxSize = sizeof(chip8->ram) - 0x200;
+    size_t bytesRead = fread(&chip8->ram[0x200], sizeof(u8), maxSize, program);
+    if (ferror(program)) {
+        fprintf(stderr, "failed to read the program\n");
+        fclose(program);
         return -1;
     }
+    if (bytesRead == maxSize && fgetc(program) != EOF) {
+        fprintf(stderr, "program is too large\n");
+        fclose(program);
+        return -1;
+    }
+    fclose(program);
     return 0;
 }
 
-void fetch(Chip8 *chip8) {
-    u16 opcode;
-    u8 firstByte = chip8->ram[chip8->pc];
-    u8 secondByte = chip8->ram[chip8->pc + 1];
-    opcode = secondByte + (firstByte << 8);
+void fetch(Chip8 *chip8)
+{
+    u8 firstByte  = chip8->ram[chip8->pc & 0xFFF];
+    u8 secondByte = chip8->ram[(chip8->pc + 1) & 0xFFF];
+    chip8->op = (u16)((firstByte << 8) | secondByte);
     chip8->pc += 2;
-    chip8->op = opcode;
 }
 
-void execute(Chip8 *chip8) {
-    u16 nnn = chip8->op & 0x0FFF;    // nnn value (last 12 bits)
-    u8 x = (chip8->op & 0x0F00) >> 8; // x value (bits 8-11)
-    u8 y = (chip8->op & 0x00F0) >> 4; // y value (bits 4-7)
-    u8 nn = chip8->op & 0x00FF;       // nn value (last 8 bits)
-    u8 n = chip8->op & 0x000F;        // n value (last 4 bits, used for sprite height)
+void execute(Chip8 *chip8)
+{
+    u16 nnn = chip8->op & 0x0FFF;
+    u8 x = (chip8->op & 0x0F00) >> 8;
+    u8 y = (chip8->op & 0x00F0) >> 4;
+    u8 nn = chip8->op & 0x00FF;
+    u8 n = chip8->op & 0x000F;
 
     switch (chip8->op & 0xF000) {
         case 0x0000:
-            switch (chip8->op & 0x00FF) {
-                case CLS:
-                    memset(&chip8->screen[0], 0, sizeof(chip8->screen));
+            switch (chip8->op) {
+                case 0x00E0: // CLS
+                    memset(chip8->screen, 0, sizeof(chip8->screen));
                     break;
-                case RET:
+                case 0x00EE: // RET
+                    if (chip8->sp == 0) {
+                        fprintf(stderr, "stack underflow\n");
+                        break;
+                    }
                     chip8->sp--;
                     chip8->pc = chip8->stack[chip8->sp];
+                    break;
+                default: // 0NNN (SYS) is ignored
                     break;
             }
             break;
@@ -104,6 +118,10 @@ void execute(Chip8 *chip8) {
             break;
 
         case CAL:
+            if (chip8->sp >= sizeof(chip8->stack) / sizeof(chip8->stack[0])) {
+                fprintf(stderr, "stack overflow\n");
+                break;
+            }
             chip8->stack[chip8->sp] = chip8->pc;
             chip8->sp++;
             chip8->pc = nnn;
@@ -121,20 +139,15 @@ void execute(Chip8 *chip8) {
             u8 xCoord = chip8->V[x] % 64;
             u8 yCoord = chip8->V[y] % 32;
             chip8->V[0xF] = 0;
-            for (int i = 0; i < n; i++) {
-                u8 rowData = chip8->ram[chip8->i + i];
-                for (int j = 0; j < 8; j++) {
-                    if (xCoord + j < 64 && yCoord + i < 32) {
-                        int idx = (yCoord + i) * 64 + (xCoord + j);
-                        u8 spritePixel = (rowData >> (7 - j)) & 1;
-                        if (spritePixel) {
-                            if (chip8->screen[idx]) {
-                                chip8->screen[idx] = 0;
-                                chip8->V[0xF] = 1;
-                            } else {
-                                chip8->screen[idx] = 1;
-                            }
-                        }
+            for (int row = 0; row < n; row++) {
+                if (yCoord + row >= 32) break;
+                u8 rowData = chip8->ram[(chip8->i + row) & 0xFFF];
+                for (int col = 0; col < 8; col++) {
+                    if (xCoord + col >= 64) break;
+                    if ((rowData >> (7 - col)) & 1) {
+                        int idx = (yCoord + row) * 64 + (xCoord + col);
+                        if (chip8->screen[idx]) chip8->V[0xF] = 1;
+                        chip8->screen[idx] ^= 1;
                     }
                 }
             }
@@ -143,31 +156,22 @@ void execute(Chip8 *chip8) {
 
         case ADD:
             chip8->V[x] += nn;
-            chip8->V[x] &= 0xFF;
             break;
 
         case SE:
-            if (chip8->V[x] == nn) {
-                chip8->pc += 2;
-            }
+            if (chip8->V[x] == nn) chip8->pc += 2;
             break;
 
         case SNE:
-            if (chip8->V[x] != nn) {
-                chip8->pc += 2;
-            }
+            if (chip8->V[x] != nn) chip8->pc += 2;
             break;
 
         case SEV:
-            if (chip8->V[x] == chip8->V[y]) {
-                chip8->pc += 2;
-            }
+            if (chip8->V[x] == chip8->V[y]) chip8->pc += 2;
             break;
 
         case SNEV:
-            if (chip8->V[x] != chip8->V[y]) {
-                chip8->pc += 2;
-            }
+            if (chip8->V[x] != chip8->V[y]) chip8->pc += 2;
             break;
 
         case 0x8000:
@@ -189,46 +193,46 @@ void execute(Chip8 *chip8) {
                     break;
 
                 case ADDC: {
-                    u16 sum  = (u16)chip8->V[x] + (u16)chip8->V[y];
+                    u16 sum = (u16)chip8->V[x] + (u16)chip8->V[y];
                     chip8->V[x] = sum & 0xFF;
                     chip8->V[0xF] = (sum > 255) ? 1 : 0;
                     break;
                 }
 
                 case SUBY: {
-                    u8 prevVx = chip8->V[x];
-                    u8 prevVy = chip8->V[y]; 
-                    chip8->V[x] = chip8->V[x] - chip8->V[y];
-                    chip8->V[0xF] = (prevVx >= prevVy) ? 1 : 0;
+                    u8 vx = chip8->V[x];
+                    u8 vy = chip8->V[y];
+                    chip8->V[x] = vx - vy;
+                    chip8->V[0xF] = (vx >= vy) ? 1 : 0;
                     break;
                 }
 
                 case SUBX: {
-                    u8 prevVx = chip8->V[x];
-                    u8 prevVy = chip8->V[y]; 
-                    chip8->V[x] = chip8->V[y] - chip8->V[x];
-                    chip8->V[0xF] = (prevVy >= prevVx) ? 1 : 0;
+                    u8 vx = chip8->V[x];
+                    u8 vy = chip8->V[y];
+                    chip8->V[x] = vy - vx;
+                    chip8->V[0xF] = (vy >= vx) ? 1 : 0;
                     break;
                 }
 
                 case SHR: {
-                    u8 lsb =  chip8->V[x] & 0x1;
-                    chip8->V[x] >>= 1;     
-                    chip8->V[0x0F] = lsb;
+                    u8 lsb = chip8->V[x] & 0x1;
+                    chip8->V[x] >>= 1;
+                    chip8->V[0xF] = lsb;
                     break;
                 }
 
                 case SHL: {
                     u8 msb = (chip8->V[x] >> 7) & 0x1;
                     chip8->V[x] <<= 1;
-                    chip8->V[0xF] = msb;     
+                    chip8->V[0xF] = msb;
                     break;
                 }
             }
             break;
 
         case JMPV:
-            chip8->pc = nnn + chip8->V[0];
+            chip8->pc = (nnn + chip8->V[0]) & 0xFFF;
             break;
 
         case RND:
@@ -238,19 +242,11 @@ void execute(Chip8 *chip8) {
         case 0xE000:
             switch (chip8->op & 0xF0FF) {
                 case SKP:
-                    printf("checking for key %x,", chip8->V[x]);
-                    printf("Key state for V[%d]: %d\n", x, chip8->kb[chip8->V[x]]);
-                    if (chip8->kb[chip8->V[x]]) {
-                        chip8->pc += 2;
-                    }
+                    if (chip8->kb[chip8->V[x] & 0xF]) chip8->pc += 2;
                     break;
 
                 case SKNP:
-                    printf("checking for key %x,", chip8->V[x]);
-                    printf("Key state for V[%d]: %d\n", x, chip8->kb[chip8->V[x]]);
-                    if (!chip8->kb[chip8->V[x]]) {
-                        chip8->pc += 2;
-                    }
+                    if (!chip8->kb[chip8->V[x] & 0xF]) chip8->pc += 2;
                     break;
             }
             break;
@@ -261,23 +257,23 @@ void execute(Chip8 *chip8) {
                     chip8->V[x] = chip8->dt;
                     break;
 
-                case GKP:
-                    // chip8->key = 0;
-                    // while (1) {
-                    //     decrementTimers(chip8);
-                    //
-                    //     chip8->key = checkKeyPress(chip8);
-                    //
-                    //     if (chip8->key > 0) {
-                    //         chip8->V[x] = chip8->key;
-                    //         break; 
-                    //     }
-                    //
-                    //     if (WindowShouldClose()) {
-                    //         break;
-                    //     }
-                    // }
+                case GKP: {
+                    // Block until a key is pressed by re-running this
+                    // instruction on the next cycle.
+                    int pressed = -1;
+                    for (int k = 0; k < 16; k++) {
+                        if (chip8->kb[k]) {
+                            pressed = k;
+                            break;
+                        }
+                    }
+                    if (pressed >= 0) {
+                        chip8->V[x] = (u8)pressed;
+                    } else {
+                        chip8->pc -= 2;
+                    }
                     break;
+                }
 
                 case SDT:
                     chip8->dt = chip8->V[x];
@@ -292,24 +288,24 @@ void execute(Chip8 *chip8) {
                     break;
 
                 case LDS:
-                    chip8->i = 0x50 + (chip8->V[x] * 5);
+                    chip8->i = 0x50 + ((chip8->V[x] & 0xF) * 5);
                     break;
 
                 case BCD:
-                    chip8->ram[chip8->i] = chip8->V[x] / 100;
-                    chip8->ram[chip8->i + 1] = (chip8->V[x] / 10) % 10;
-                    chip8->ram[chip8->i + 2] = chip8->V[x] % 10;
+                    chip8->ram[chip8->i & 0xFFF]       = chip8->V[x] / 100;
+                    chip8->ram[(chip8->i + 1) & 0xFFF] = (chip8->V[x] / 10) % 10;
+                    chip8->ram[(chip8->i + 2) & 0xFFF] = chip8->V[x] % 10;
                     break;
 
                 case STM:
-                    for (u16 i = 0; i <= x; i++) {
-                        chip8->ram[chip8->i + i] = chip8->V[i];
+                    for (int k = 0; k <= x; k++) {
+                        chip8->ram[(chip8->i + k) & 0xFFF] = chip8->V[k];
                     }
                     break;
 
                 case LDM:
-                    for (int i = 0; i <= x; i++) {
-                        chip8->V[i] = chip8->ram[chip8->i + i];
+                    for (int k = 0; k <= x; k++) {
+                        chip8->V[k] = chip8->ram[(chip8->i + k) & 0xFFF];
                     }
                     break;
             }
@@ -317,9 +313,8 @@ void execute(Chip8 *chip8) {
     }
 }
 
-
-
-void draw(Chip8 *chip8) {
+void draw(Chip8 *chip8)
+{
     BeginDrawing();
     ClearBackground(BLACK);
     for (int i = 0; i < HEIGHT / SCALE; i++) {
@@ -333,41 +328,37 @@ void draw(Chip8 *chip8) {
     EndDrawing();
 }
 
-
-
-int main(int argc, char *argv[]) {
-    srand(time(0));
-    Chip8 chip8;
-    initChip8(&chip8);
-
+int main(int argc, char *argv[])
+{
     if (argc < 2) {
         printf("Usage: %s <path_to_rom.ch8>\n", argv[0]);
         return -1;
     }
+
+    srand(time(0));
+    Chip8 chip8;
+    initChip8(&chip8);
 
     if (loadProgram(&chip8, argv[1]) != 0) {
         printf("Failed to load ROM: %s\n", argv[1]);
         return -1;
     }
 
-    SetTargetFPS(120);
-    clock_t lastTimerUpdate = clock();
-
     InitWindow(WIDTH, HEIGHT, "CHIP 8 EMU");
+    SetTargetFPS(60);
 
     while (!WindowShouldClose()) {
         checkKeyPress(&chip8);
-        fetch(&chip8);
-        execute(&chip8);
-        draw(&chip8);
 
-        clock_t currentTime = clock();
-        if (((currentTime - lastTimerUpdate) * 1000 / CLOCKS_PER_SEC) >= TIMER_INTERVAL) {
-            decrementTimers(&chip8);
-            lastTimerUpdate = currentTime;
+        for (int c = 0; c < CYCLES_PER_FRAME; c++) {
+            fetch(&chip8);
+            execute(&chip8);
         }
+
+        decrementTimers(&chip8);
+        draw(&chip8);
     }
 
-    CloseWindow(); // Close the window when done
+    CloseWindow();
     return 0;
 }

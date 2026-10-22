@@ -1,14 +1,15 @@
-#include <stdint.h>
 #include <raylib.h>
+#include <stdint.h>
 
-//screen
+// screen
 #define WIDTH 640
 #define HEIGHT 320
 #define SCALE 10
 
+
 // timer
-#define TIMER_FREQUENCY 60                // Timer frequency in Hz
-#define TIMER_INTERVAL (1000 / TIMER_FREQUENCY) // Interval in milliseconds
+#define TIMER_FREQUENCY 60    // Timer frequency in Hz
+#define CYCLES_PER_FRAME 10   // ~600 instructions/sec at 60 FPS
 
 // instructions
 #define CLS 0x00E0  // Clear the display.
@@ -25,7 +26,7 @@
 #define AND 0x8002  // Set Vx = Vx AND Vy.
 #define XOR 0x8003  // Set Vx = Vx XOR Vy.
 #define ADDC 0x8004 // Set Vx = Vx + Vy, set VF = carry.
-#define SUBY 0x8005  // Set Vx = Vx - Vy, set VF = NOT borrow.
+#define SUBY 0x8005 // Set Vx = Vx - Vy, set VF = NOT borrow.
 #define SHR 0x8006  // Set Vx = Vx SHR 1.
 #define SUBX 0x8007 // Set Vx = Vy - Vx, set VF = NOT borrow.
 #define SHL 0x800E  // Set Vx = Vx SHL 1.
@@ -51,7 +52,7 @@ typedef uint16_t u16;
 
 typedef struct {
     u16 opcode;
-    const char* mnemonic;
+    const char *mnemonic;
 } Instruction;
 
 const u8 FONTSET[] = {
@@ -74,18 +75,16 @@ const u8 FONTSET[] = {
 };
 
 typedef struct {
-  u8 ram[4096];
-  u16 stack[16];
-  u8 V[16];
-  u16 pc;
-  u8 sp;
-  u16 i;
-  u8 dt;
-  u8 st;
-  u16 op;
-  int screen[64 * 32];
-  u8 kb[0xF];
-  u8 key;
+    u8 ram[4096];
+    u16 stack[16];
+    u8 V[16];
+    u16 pc;
+    u8 sp;
+    u16 i;
+    u8 dt;
+    u8 st;
+    u16 op;
+    int screen[64 * 32];
+    u8 kb[16];
+    u8 key;
 } Chip8;
-
-
